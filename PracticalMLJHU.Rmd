@@ -1,0 +1,87 @@
+---
+title: "Practical Machine Learning"
+output: html_document
+---
+### Introduction
+The data given is training and testing ,training data will be further broken into training and validation training data will be used to fit the model and validation data will be used to check the model.The test data will be used for seeing it's performance.
+```{r echo=FALSE,results='hide'}
+library(knitr)
+opts_chunk$set(cache = TRUE,results = 'asis',echo = TRUE)
+```
+
+```{r }
+if(file.exists("data/pml-training.csv")) {
+    print("File exists")
+} else {
+    trainURL <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+    download.file(trainURL, "data/training.csv")
+}
+if(file.exists("data/pml-testing.csv")) {
+    print("File exists")
+} else {
+testURL <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(testURL, "data/testing.csv")
+}
+```
+
+## Reading data
+```{r}
+library(caret)
+training = read.csv("data/training.csv",na.strings=c("NA","#DIV/0!",""))
+testing = read.csv("data/testing.csv",na.strings=c("NA","#DIV/0!",""))
+head(training)
+```
+Removing columns with NA values
+```{r}
+n = NULL
+for (i in names(training)){
+    if(sum(is.na(training[,i]))/length(training[,i])<0.2){
+        n= c(n,i)
+    }
+}
+training = training[,n]
+head(training)
+
+```
+Removing all the variables which won't be helpful in prediction
+```{r}
+rm = c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "num_window")
+rm = which(names(training) %in% rm)
+training = training[,-rm]
+#training = training[,-nearZeroVar(training)]
+training$classe = factor(training$classe)
+head(training)
+```
+## Data Partitioning
+splitting the data into training and validation sets
+```{r}
+ind = createDataPartition(training$classe,p=0.8,list = FALSE)
+traindat = training[ind,]
+validation = training[-ind,]
+```
+## Training
+We will use K fold cross validation with k=5
+We will fit a model using XGBoost
+```{r}
+library(xgboost)
+control <- trainControl(method="cv", 5, allowParallel = TRUE)
+modelXGB <- train(classe ~ ., data=traindat, method="xgbTree", trControl=control)
+modelXGB
+```
+## Predictions and performance of model on train and validation data
+```{r}
+predict1 <- predict(modelXGB, traindat)
+confusionMatrix(traindat$classe, predict1)
+predict2 <- predict(modelXGB, validation)
+confusionMatrix(validation$classe, predict2)
+```
+We can see that model is doing well both on training and validation data
+Next we will see the performance of the model on test dataset.On training set it achieved 100% accuracy , and on validation it made only 13 errors and accuracy is 99%
+
+## Predicting Test Data
+```{r}
+predictest <- predict(modelXGB, testing)
+testpred = cbind(predictest,testing)
+testpred
+```
+Above are predictions for the given test set.
